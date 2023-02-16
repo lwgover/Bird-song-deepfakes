@@ -103,7 +103,7 @@ def get_wave_data(file:str):
     for i in range(w.getnframes()):
         wavedata = w.readframes(1)
         data1 = struct.unpack("<h", wavedata)
-        data2[i] = int(data1[0])
+        data2[i] = data1[0]/255
     
 ################# I'm not sure who's code is right here>??? ###############
     # for 1-byte frames, we need values from 0 to 255
