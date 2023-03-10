@@ -288,40 +288,8 @@ class Chromoscalogram:
         toShow = np.flipud(toShow.astype(np.uint8))
         if filename == None: filename = self.name + ".png"
 
-        im = Image.fromarray(toShow)
-        im.save(filename, cmin=0, cmax=255)
-
-    def to_numpy_matrix(self, scale=None, filename=None):
-        """Output a PNG of the Chromoscalogram"""
-        
-        phases = np.zeros([self.get_num_freqs(), self.get_num_times()])
-        for f in range(len(self.data)):
-            for t in range(len(self.data[f])):
-                phases[f][t] = math.atan2(self.data[f][t].imag, self.data[f][t].real).real
-        
-        data = [abs(x) for x in self.data]
-        
-         
-        if scale == None:
-            scale = max([max(x) for x in data])
-        
-        data = [x/scale for x in data]
-        toShow = np.zeros([self.get_num_freqs(), self.get_num_times(), 3], dtype=np.uint8)
-
-        for f in range(self.get_num_freqs()):
-            padding_left = (len(data[0]) - len(data[f]))//2
-            unpadded = 0
-            for t in range(padding_left, padding_left + len(data[f])):
-                # write each RGB pixel, normalizing between 0-255
-                rgb = Chromoscalogram.rgb(phases[f][unpadded])
-                # line below presents an alternative coloring/phase representation. A perfect oscillating frequency should be a static color
-                #rgb = Chromoscalogram.rgb2(phases[f][unpadded], self.freqs[f], t, self.quality)
-                toShow[f][t][0] = (1-rgb[0] * data[f][unpadded])
-                toShow[f][t][1] = (1-rgb[1] * data[f][unpadded])
-                toShow[f][t][2] = (1-rgb[2] * data[f][unpadded])
-                unpadded += 1
-        
-        toShow = np.flipud(toShow.astype(np.uint8))
+        #im = Image.fromarray(toShow)
+        #im.save(filename, cmin=0, cmax=255)
         return toShow
  
 
