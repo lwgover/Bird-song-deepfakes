@@ -77,9 +77,9 @@ def train_one_epoch(epoch, model,X_train, Y_train):
 
         data_count += len(inp)
 
-        decoder_inp = np.zeros((len(targ), Ty))
-        decoder_inp[:, 1:] = targ[:, :-1]
-        decoder_inp[:, 0] = targ_vocab.word_idx['<sos>']
+        discriminator_inp = np.zeros((len(targ), Ty))
+        discriminator_inp[:, 1:] = targ[:, :-1]
+        discriminator_inp[:, 0] = targ_vocab.word_idx['<sos>']
         targ_one_hot = np.zeros((len(targ), Ty, targ_vocab_size), dtype='float32')
         for idx, tokVec in enumerate(targ):
 
@@ -88,7 +88,7 @@ def train_one_epoch(epoch, model,X_train, Y_train):
                     targ_one_hot[idx, tok_idx, tok] = 1
 
 
-        history = model.fit(inp, decoder_inp, targ_one_hot, batch_size=args.batch_size, verbose=0)
+        history = model.fit(inp, discriminator_inp, targ_one_hot, batch_size=args.batch_size, verbose=0)
 
         loss_b, acc_b = history.history['loss'][0], history.history['acc_func'][0]
 
@@ -104,16 +104,16 @@ def evaluate(model, dataset, batch_size=64, verbose=0):
 
         data_count += len(inp)
 
-        decoder_inp = np.zeros((len(targ), Ty))
-        decoder_inp[:, 1:] = targ[:, :-1]
-        decoder_inp[:, 0] = targ_vocab.word_idx['<sos>']
+        discriminator_inp = np.zeros((len(targ), Ty))
+        discriminator_inp[:, 1:] = targ[:, :-1]
+        discriminator_inp[:, 0] = targ_vocab.word_idx['<sos>']
         targ_one_hot = np.zeros((len(targ), Ty, targ_vocab_size), dtype='float32')
         for idx, tokVec in enumerate(targ):
 
             for tok_idx, tok in enumerate(tokVec):
                 if (tok > 0):
                     targ_one_hot[idx, tok_idx, tok] = 1
-        loss_b, acc_b = model.evaluate(inp, decoder_inp, targ_one_hot, batch_size=batch_size, verbose=verbose)
+        loss_b, acc_b = model.evaluate(inp, discriminator_inp, targ_one_hot, batch_size=batch_size, verbose=verbose)
         loss += loss_b * len(inp)
         acc += acc_b * len(inp)
     return loss / data_count, acc / data_count
@@ -128,15 +128,15 @@ if __name__ == '__main__':
     #targ_vocab_size = len(targ_vocab.word_idx)
     # setting
     HIDDEN_UNITS = args.hidden
-    encoder_units = HIDDEN_UNITS
-    decoder_units = HIDDEN_UNITS
+    generator_units = HIDDEN_UNITS
+    discriminator_units = HIDDEN_UNITS
 
     wordVec = {}
 
     input_size = 76 * 2 + 1
     
     # load in word vectors in a dict
-    model = GAN_Model(args.rnn_arch, 1,1, encoder_units, decoder_units, input_size)
+    model = GAN_Model(args.rnn_arch, 1,1, generator_units, discriminator_units, input_size)
 
     model.compile(opt='adam', loss=loss_func, metrics=[acc_func])
 

@@ -70,31 +70,31 @@ class GAN_Model:
             Tx (int I think?): Idk what this does. It might be a set length for generation?, if so we should delete. It is defined in utils as input length?
             Ty (int I think?): Idk what this does. It is defined in utils as target length?
             rnn_arch (string): the architecture we're using, ex: lstm, bidirectional
-            num_hidden_units (int): how many hidden units in the encoder
+            num_hidden_units (int): how many hidden units in the generator
             input_size (int): input size
         """
 
         # import pdb; pdb.set_trace()
         self.rnn_arch = rnn_arch
-        self.decoder_units = num_hidden_units
+        self.discriminator_units = num_hidden_units
 
         # attention
         self.attentionLayer = AttentionLayer(Tx)
 
-        # encoder
+        # generator
         self.input = Input(shape=(Tx,))
-        encoder = rnn_archs[rnn_arch](num_hidden_units, return_sequences=True)
-        self.encoder_out = encoder(input_size)
+        generator = rnn_archs[rnn_arch](num_hidden_units, return_sequences=True)
+        self.generator_out = generator(input_size)
 
-        # decoder
-        self.decoder = lstm(units=num_hidden_units, return_state=True)
+        # discriminator
+        self.discriminator = lstm(units=num_hidden_units, return_state=True)
         self.dense_decode = Dense(input_size, activation='softmax')
 
         # concat
         self.concat2 = Concatenate(axis=2)
 
-        self.decoder_state_0 = Input(shape=(num_hidden_units,))
-        self.decoder_cell_0 = Input(shape=(num_hidden_units,))
+        self.discriminator_state_0 = Input(shape=(num_hidden_units,))
+        self.discriminator_cell_0 = Input(shape=(num_hidden_units,))
         self.train_model = self.get_train_model(Ty)
         print('train model was built')
         
@@ -102,68 +102,68 @@ class GAN_Model:
         print('inference model was built')
 
     def get_train_model(self, Ty):
-        decoder_inp = Input(shape=(Ty,))
-        decoder_inp_embedded = self.decoder_embedding(decoder_inp)
+        discriminator_inp = Input(shape=(Ty,))
+        discriminator_inp_embedded = self.discriminator_embedding(discriminator_inp)
 
-        decoder_state = self.decoder_state_0
-        decoder_cell = self.decoder_cell_0
+        discriminator_state = self.discriminator_state_0
+        discriminator_cell = self.discriminator_cell_0
 
         # Iterate attention Ty times
         outputs = []
         for t in range(Ty):
 
-            # Get context vector with encoder and attention
-            context = self.attentionLayer.one_step_attention(self.encoder_out, decoder_state)
+            # Get context vector with generator and attention
+            context = self.attentionLayer.one_step_attention(self.generator_out, discriminator_state)
 
             # For teacher forcing, get the previous word
             select_layer = Lambda(lambda x: x[:, t:t + 1])
-            prevWord = select_layer(decoder_inp_embedded)
+            prevWord = select_layer(discriminator_inp_embedded)
 
-            # Concat context and previous word as decoder input
-            decoder_in_concat = self.concat2([context, prevWord])
+            # Concat context and previous word as discriminator input
+            discriminator_in_concat = self.concat2([context, prevWord])
 
-            # pass into decoder, inference output
-            pred, decoder_state, decoder_cell = self.decoder(decoder_in_concat, initial_state=[decoder_state, decoder_cell])
+            # pass into discriminator, inference output
+            pred, discriminator_state, discriminator_cell = self.discriminator(discriminator_in_concat, initial_state=[discriminator_state, discriminator_cell])
             pred = self.dense_decode(pred)
             outputs.append(pred)
 
         stack_layer = Lambda(GAN_Model.stack)
         outputs = stack_layer(outputs)
-        return Model(inputs=[self.input, decoder_inp, self.decoder_state_0, self.decoder_cell_0], outputs=outputs)
+        return Model(inputs=[self.input, discriminator_inp, self.discriminator_state_0, self.discriminator_cell_0], outputs=outputs)
 
     # in the inference model teacher forcing is not available
     def get_inference_model(self, Tx):
-        decoder_inp = Input(shape=(1,))
+        discriminator_inp = Input(shape=(1,))
 
-        decoder_state = self.decoder_state_0
-        decoder_cell = self.decoder_cell_0
+        discriminator_state = self.discriminator_state_0
+        discriminator_cell = self.discriminator_cell_0
 
-        decoder_inp_embedded = self.decoder_embedding(decoder_inp)
-        # Get context vector with encoder and attention
-        context = self.attentionLayer.one_step_attention(self.encoder_out, decoder_state)
+        discriminator_inp_embedded = self.discriminator_embedding(discriminator_inp)
+        # Get context vector with generator and attention
+        context = self.attentionLayer.one_step_attention(self.generator_out, discriminator_state)
 
-        # Concat context and previous word as decoder input
-        decoder_in_concat = self.concat2([context, decoder_inp_embedded])
+        # Concat context and previous word as discriminator input
+        discriminator_in_concat = self.concat2([context, discriminator_inp_embedded])
 
-        # pass into decoder, inference output
+        # pass into discriminator, inference output
         if self.rnn_arch == 'gru':
-            pred, decoder_state = self.decoder(decoder_in_concat, initial_state=decoder_state)
+            pred, discriminator_state = self.discriminator(discriminator_in_concat, initial_state=discriminator_state)
         else:
-            pred, decoder_state, decoder_cell = self.decoder(decoder_in_concat,
-                                                             initial_state=[decoder_state, decoder_cell])
+            pred, discriminator_state, discriminator_cell = self.discriminator(discriminator_in_concat,
+                                                             initial_state=[discriminator_state, discriminator_cell])
 
         pred = self.dense_decode(pred)
 
         if self.rnn_arch == 'gru':
-            return Model(inputs=[self.input, decoder_inp, self.decoder_state_0], outputs=pred)
+            return Model(inputs=[self.input, discriminator_inp, self.discriminator_state_0], outputs=pred)
         else:
-            return Model(inputs=[self.input, decoder_inp, self.decoder_state_0, self.decoder_cell_0], outputs=pred)
+            return Model(inputs=[self.input, discriminator_inp, self.discriminator_state_0, self.discriminator_cell_0], outputs=pred)
 
-    def fit(self, enc_inp, decoder_inp, targ, batch_size=64, verbose=0):
+    def fit(self, enc_inp, discriminator_inp, targ, batch_size=64, verbose=0):
 
-        s_0 = np.zeros((len(enc_inp), self.decoder_units))
-        c_0 = np.zeros((len(enc_inp), self.decoder_units))
-        history = self.train_model.fit([enc_inp, decoder_inp, s_0, c_0], targ, batch_size=batch_size,verbose=verbose)
+        s_0 = np.zeros((len(enc_inp), self.discriminator_units))
+        c_0 = np.zeros((len(enc_inp), self.discriminator_units))
+        history = self.train_model.fit([enc_inp, discriminator_inp, s_0, c_0], targ, batch_size=batch_size,verbose=verbose)
         self.inference_model.set_weights(self.train_model.get_weights())
         return history
 
@@ -171,14 +171,14 @@ class GAN_Model:
         self.train_model.compile(optimizer=opt, loss=loss, metrics=metrics)
         self.inference_model.compile(optimizer=opt, loss=loss, metrics=metrics)
 
-    def evaluate(self, enc_inp, decoder_inp, targ, batch_size=64, verbose=0):
-        s_0 = np.zeros((len(enc_inp), self.decoder_units))
-        c_0 = np.zeros((len(enc_inp), self.decoder_units))
-        return self.train_model.evaluate([enc_inp, decoder_inp, s_0, c_0], targ, batch_size=batch_size, verbose=verbose)
+    def evaluate(self, enc_inp, discriminator_inp, targ, batch_size=64, verbose=0):
+        s_0 = np.zeros((len(enc_inp), self.discriminator_units))
+        c_0 = np.zeros((len(enc_inp), self.discriminator_units))
+        return self.train_model.evaluate([enc_inp, discriminator_inp, s_0, c_0], targ, batch_size=batch_size, verbose=verbose)
 
-    def inference_evaluate(self, enc_inp, decoder_inp, targ, batch_size=64, verbose=0):
-        s_0 = np.zeros((len(enc_inp), self.decoder_units))
-        c_0 = np.zeros((len(enc_inp), self.decoder_units))
+    def inference_evaluate(self, enc_inp, discriminator_inp, targ, batch_size=64, verbose=0):
+        s_0 = np.zeros((len(enc_inp), self.discriminator_units))
+        c_0 = np.zeros((len(enc_inp), self.discriminator_units))
 
         Ty = targ.shape[1]
         loss = 0.0
@@ -186,13 +186,13 @@ class GAN_Model:
         preds = []
 
         for t in range(Ty):
-            pred = self.inference_model.predict([enc_inp, decoder_inp, s_0, c_0])
-            loss_b, acc_b = self.inference_model.evaluate([enc_inp, decoder_inp, s_0, c_0], targ[:, t],
+            pred = self.inference_model.predict([enc_inp, discriminator_inp, s_0, c_0])
+            loss_b, acc_b = self.inference_model.evaluate([enc_inp, discriminator_inp, s_0, c_0], targ[:, t],
                                                             batch_size=batch_size, verbose=verbose)
 
             pred = np.argmax(pred, axis=-1)
-            decoder_inp = np.expand_dims(pred, axis=1)
-            preds.append(decoder_inp)
+            discriminator_inp = np.expand_dims(pred, axis=1)
+            preds.append(discriminator_inp)
             loss += loss_b
             acc += acc_b
         return loss / Ty, acc / Ty, GAN_Model.stack(preds).numpy()
